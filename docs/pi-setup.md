@@ -23,7 +23,32 @@ The logger binary is not needed until Phase 5. Phases 1 to 4 are plain OS setup.
 4. Create the separate data partition, mounted with `noatime`.
 5. Set journald to volatile (`Storage=volatile`). Disable fake-hwclock.
 
-**Open problem:** Pi OS expands the root partition to fill the card on first boot, so a separate data partition needs a trick to avoid that. Exact commands are still to be written.
+### Windows10 for handling partitions:
+
+We can create the data partition from Windows between the flash and the first boot, which means we don’t have to shrink anything.
+
+1. Flash Pi OS Lite with Imager, with your user, SSH and Wi-Fi settings. Don’t boot the Pi yet.
+2. In an admin PowerShell run diskpart, then:
+```
+list disk
+select disk 1
+create partition primary offset=8388608
+exit
+```
+Check list disk first and make sure disk 1 is the ~60 GB card. The offset is in KB, so this starts the new partition at 8 GiB and leaves a gap after root.
+3. If Windows offers to format the new partition, click Cancel. If diskpart refuses on removable media, use the loopback option instead.
+4. Boot the Pi, SSH in, and run lsblk. You should see a small root (p2) and p3 starting after the gap. If anything looks wrong, reflash. Nothing is lost.
+5. If root is still around 3 GB, grow it into the gap, which can be done while running:
+```
+sudo parted /dev/mmcblk0 resizepart 2 8000MiB
+sudo resize2fs /dev/mmcblk0p2
+```
+6. Format p3 with `sudo mkfs.ext4 -L data /dev/mmcblk0p3`, and make the mount point with `sudo mkdir /data`.
+7. Add this line to /etc/fstab:
+```
+LABEL=data  /data  ext4  defaults,noatime,nofail  0  2
+```
+8. Test it with `sudo mount -a`, then run `findmnt /data` (the options column should show noatime). Finish with `sudo chown youruser: /data`.
 
 ## Phase 3: RTC, time, SSH lockdown (~1 h)
 
